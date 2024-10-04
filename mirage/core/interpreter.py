@@ -2,6 +2,7 @@ from mirage.libs import io
 import readline,shlex,re,inspect,glob,sys
 import os
 import keyboard
+from typing import List, Dict, Any, Optional, Callable
 
 class Interpreter:
 	'''
@@ -77,27 +78,24 @@ class Interpreter:
 	'''
 
 
-	def __init__(self,prompt=io.colorize(" ~~> ", "cyan"),autocompletion=True,suggestion=True):
+	def __init__(self, prompt: str = "\033[36m ~~> \033[0m", autocompletion: bool = True, suggestion: bool = True):
 		''' 
 		This constructor initializes the interpreter instance.
 		:param prompt: string used to generate the prompt
-		:type prompt: str
 		:param autocompletion: boolean indicating if the autocompletion mode is enabled
-		:type autocompletion: bool
 		:param suggestion: boolean indicating if the suggestion mode is enabled
-		:type suggestion: bool
 		'''
-		self.prompt = prompt
-		self.running = True
-		self.autocompletionMode = autocompletion
-		self.suggestionMode = suggestion
-		self.suggestion = ""
-		self.usage = ""
-		self.cursorOffset = 0
-		self.availableCommands = ["exit"]
+		self.prompt: str = prompt
+		self.running: bool = True
+		self.autocompletionMode: bool = autocompletion
+		self.suggestionMode: bool = suggestion
+		self.suggestion: str = ""
+		self.usage: str = ""
+		self.cursorOffset: int = 0
+		self.availableCommands: List[str] = ["exit"]
 
 	########################### AUTOCOMPLETION ###########################
-	def _getInputState(self,text=None):
+	def _getInputState(self, text: Optional[str] = None) -> tuple:
 		'''
 		This method returns the input state.
 		'''
@@ -107,66 +105,66 @@ class Interpreter:
 		command = line[0]
 		start = text[:text.rindex(line[-1])-1]
 		current = line[-1]
-		return line,command,start,current
+		return line, command, start, current
 	
-	def _autocompletion(self,text,state):
+	def _autocompletion(self, text: str, state: int) -> Optional[str]:
 		'''
 		This method generates the autocompletion list.
 		'''
-		line,command,start,current = self._getInputState(text)
+		line, command, start, current = self._getInputState(text)
 
 		commandsList = [entry for entry in dir(self) if (entry[:2] != "__" and
 								entry.startswith(command) and
-								callable(getattr(self,entry)) and
+								callable(getattr(self, entry)) and
 								entry in self.availableCommands
 								)]
 		if len(line) == 1:
-			return commandsList[state]
+			return commandsList[state] if state < len(commandsList) else None
 		else:
-			sig = inspect.signature(getattr(self,command))
+			sig = inspect.signature(getattr(self, command))
 			currentArg = list(sig.parameters.items())[len(line)-2][1]
 			annotation = currentArg.annotation
-			result = []
-			if isinstance(annotation,list):
+			result: List[str] = []
+			if isinstance(annotation, list):
 				result = annotation
-			elif isinstance(annotation,str):				
+			elif isinstance(annotation, str):				
 				if annotation == "!path":
 					result = [x for x in glob.glob(current+'*')]
 				elif annotation.startswith("!method:"):
 					methodName = annotation[8:]
-					if hasattr(self,methodName) and callable(getattr(self,methodName)):
-						result = getattr(self,methodName)()
+					if hasattr(self, methodName) and callable(getattr(self, methodName)):
+						result = getattr(self, methodName)()
 				elif annotation.startswith("!function:"):
 					functionName = annotation[10:]
 					if functionName in globals() and callable(globals()[functionName]):
 						result = globals()[functionName]()
 				elif annotation.startswith("!attribute:"):
 					attributeName = annotation[11:]
-					if hasattr(self,attributeName) and isinstance(getattr(self,attributeName),list):
-						result = getattr(self,attributeName)
+					if hasattr(self, attributeName) and isinstance(getattr(self, attributeName), list):
+						result = getattr(self, attributeName)
 				elif annotation.startswith("!variable:"):
 					variableName = annotation[10:]
-					if variableName in globals() and isinstance(getattr(self,variableName),list):
+					if variableName in globals() and isinstance(globals()[variableName], list):
 						result = globals()[variableName]
 				else:
 					result = [annotation]
 			if "|" in current:
 				beforePipe = current[:current.rindex("|")+1]
 				afterPipe = current[current.rindex("|")+1:]
-				return [start+" "+beforePipe+c for c in result if c.startswith(afterPipe)][state]
+				return [start+" "+beforePipe+c for c in result if c.startswith(afterPipe)][state] if state < len(result) else None
 
-			return [start+" "+c for c in result if c.startswith(current) and c!=current][state]
+			return [start+" "+c for c in result if c.startswith(current) and c!=current][state] if state < len(result) else None
 
-	def _matchDisplayHook(self, substitution, matches, longest_match_length):
+	def _matchDisplayHook(self, substitution: str, matches: List[str], longest_match_length: int) -> None:
 		'''
 		This method formats the output of the autocompletion feature.
 		'''
-		line,command,start,current = self._getInputState()
+		line, command, start, current = self._getInputState()
 		display = ""
 		width = os.get_terminal_size().columns
 		for match in matches:
 			if len(line) > 1:
-				matchValue = match.replace(start,"")
+				matchValue = match.replace(start, "")
 			else:
 				matchValue = match
 			matchValue += "   "
@@ -178,7 +176,7 @@ class Interpreter:
 		print(self.prompt.rstrip(), readline.get_line_buffer(), sep='', end='')
 		sys.stdout.flush()
 
-	def _enableAutocompletion(self):
+	def _enableAutocompletion(self) -> None:
 		'''
 		This method enables the autocompletion mode.
 		'''
@@ -187,7 +185,7 @@ class Interpreter:
 		readline.set_completer(self._autocompletion)
 		readline.set_completion_display_matches_hook(self._matchDisplayHook)
 
-	def _disableAutocompletion(self):
+	def _disableAutocompletion(self) -> None:
 		'''
 		This method disables the autocompletion mode.
 		'''
@@ -195,26 +193,25 @@ class Interpreter:
 		readline.set_completion_display_matches_hook(None)
 
 	########################### INTERPRETER ###########################
-	def fail(self):
+	def fail(self) -> None:
 		'''
 		This method is called if a command typed by the user is not found in the ``availableCommand`` attribute.
 		'''
-		io.fail("Unknown command !")
+		io.fail("Unknown command!")
 
-	def exit(self):
+	def exit(self) -> None:
 		'''
 		This method exits the interpreter's main loop.
 		It is a command available in the interpreter by default.
 		'''
 		self.running = False
 
-	def evaluateCommand(self,command):
+	def evaluateCommand(self, command: str) -> None:
 		'''
 		This method allows to evaluate a specific command provided by the user in the interpreter.
 		It uses introspection in order to find a corresponding method in the current class.
 		
 		:param command: command provided by the user
-		:type command: list of str
 		'''		
 		words = shlex.split(command)
 
@@ -223,42 +220,44 @@ class Interpreter:
 			arguments = words[1:] if len(words) > 1 else []
 
 			if (	opcode in self.availableCommands and
-				hasattr(self,opcode) and
-				callable(getattr(self,opcode)) and
+				hasattr(self, opcode) and
+				callable(getattr(self, opcode)) and
 				(
-					len(inspect.getfullargspec(getattr(self,opcode)).args)-1 == len(arguments) or
+					len(inspect.getfullargspec(getattr(self, opcode)).args)-1 == len(arguments) or
 					(
-						inspect.getfullargspec(getattr(self,opcode)).defaults is not None and 
-						len(inspect.getfullargspec(getattr(self,opcode)).args) - 1 
-					  	- len(inspect.getfullargspec(getattr(self,opcode)).defaults) <= len(arguments) and
-						len(arguments) <= len(inspect.getfullargspec(getattr(self,opcode)).defaults)
+						inspect.getfullargspec(getattr(self, opcode)).defaults is not None and 
+						len(inspect.getfullargspec(getattr(self, opcode)).args) - 1 
+					  	- len(inspect.getfullargspec(getattr(self, opcode)).defaults) <= len(arguments) and
+						len(arguments) <= len(inspect.getfullargspec(getattr(self, opcode)).args) - 1
 					)
 				)
 			):
-				getattr(self,opcode)(*arguments)
+				try:
+					getattr(self, opcode)(*arguments)
+				except Exception as e:
+					print(f"Error executing command: {str(e)}")
 			else:
 				self.fail()
 	
-	def evaluateScript(self,script):
+	def evaluateScript(self, script: str) -> None:
 		'''
 		This method allows to evaluate a specific list of commands (script) provided by the user in the interpreter.
 		It splits the string provided by the user using the delimiter ``;`` and calls the method ``evaluateCommand``
 		on each command found.
 
 		:param script: script provided by the user
-		:type script: str
 		'''	
 		if script != "":
-			if script[-1]==";":
+			if script[-1] == ";":
 				script = script[:-1]
 
-			commandsList = re.split(''';(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''',script)
+			commandsList = re.split(''';(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''', script)
 			for cmd in commandsList:
 				self.evaluateCommand(cmd)
 
 	########################### SUGGESTION ###########################
 
-	def _updateInput(self,key):
+	def _updateInput(self, key: keyboard.KeyboardEvent) -> None:
 		'''
 		This method updates the input and adds a potential suggestion (if any)
 		'''
@@ -269,7 +268,7 @@ class Interpreter:
 			self._generateSuggestion(currentBuffer)
 
 
-	def _displayInput(self,suggestion):
+	def _displayInput(self, suggestion: str) -> None:
 		'''
 		This method displays the input with the provided suggestion
 		'''
@@ -282,7 +281,7 @@ class Interpreter:
 			if len(splittedInstruction) > 0:
 				firstCommand = splittedInstruction[0]
 				if firstCommand in self.availableCommands:
-					newInstructions.append(instruction.replace(firstCommand,"\x1b[1m"+firstCommand+"\x1b[0m",1))
+					newInstructions.append(instruction.replace(firstCommand, "\x1b[1m"+firstCommand+"\x1b[0m", 1))
 				else:
 					newInstructions.append(instruction)
 		inputBuffer = ";".join(newInstructions)
@@ -292,7 +291,7 @@ class Interpreter:
 		sys.stdout.write("\r"+normalDisplay+suggestion)
 		sys.stdout.write("\r\x1b8")
 
-	def _generateSuggestion(self,currentBuffer):
+	def _generateSuggestion(self, currentBuffer: str) -> None:
 		'''
 		This method generates the suggestion according to the current input buffer
 		'''
@@ -302,24 +301,24 @@ class Interpreter:
 		inputData = lastInstruction.split()
 		if len(inputData) != 0:
 			command = inputData[0]
-			if hasattr(self,command) and callable(getattr(self,command)) and command in self.availableCommands:
-				sig = inspect.signature(getattr(self,command))
+			if hasattr(self, command) and callable(getattr(self, command)) and command in self.availableCommands:
+				sig = inspect.signature(getattr(self, command))
 				if len(sig.parameters) != 0:
 					ignore = len(lastInstruction.split())-1
 					for i in sig.parameters:
 						if ignore == 0:
 							if sig.parameters[i].default is inspect.Parameter.empty:
-								self.suggestion+="<"+i+"> "
+								self.suggestion += f"<{i}> "
 							else:
-								self.suggestion+="["+i+"] "
+								self.suggestion += f"[{i}] "
 						else:
-							ignore -=1
+							ignore -= 1
 					self.suggestion = "\x1b[2m"+self.suggestion+"\x1b[22m"
-					self.usage = "Usage : this command allows to send a notification"
+					self.usage = "Usage: this command allows to send a notification"
 					suggestion = self.suggestion
 		self._displayInput(suggestion)
 
-	def _clearSuggestion(self,key=None):
+	def _clearSuggestion(self, key: Optional[keyboard.KeyboardEvent] = None) -> None:
 		'''
 		This method clears the previously displayed suggestion
 		'''
@@ -329,20 +328,20 @@ class Interpreter:
 			self.suggestion = ""
 		self._displayInput(suggestion)
 
-	def _enableSuggestion(self):
+	def _enableSuggestion(self) -> None:
 		'''
 		This method enables the suggestion mode.
 		'''
 		keyboard.on_release(self._updateInput)
-		keyboard.on_press_key("enter",self._clearSuggestion)
+		keyboard.on_press_key("enter", self._clearSuggestion)
 
-	def _disableSuggestion(self):
+	def _disableSuggestion(self) -> None:
 		'''
 		This method disables the suggestion mode.
 		'''
 		keyboard.unhook_all()
 
-	def loop(self):
+	def loop(self) -> None:
 		'''
 		This method is the main interaction loop of the interpreter.
 		'''
@@ -351,9 +350,15 @@ class Interpreter:
 				self._enableAutocompletion()
 			if self.suggestionMode:
 				self._enableSuggestion()
-			command=input(self.prompt)
-			if self.autocompletionMode:
-				self._disableAutocompletion()
-			if self.suggestionMode:
-				self._disableSuggestion()
-			self.evaluateScript(command)
+			try:
+				command = input(self.prompt)
+				if self.autocompletionMode:
+					self._disableAutocompletion()
+				if self.suggestionMode:
+					self._disableSuggestion()
+				self.evaluateScript(command)
+			except EOFError:
+				print("\nExiting...")
+				self.exit()
+			except KeyboardInterrupt:
+				print("\nCommand interrupted.")

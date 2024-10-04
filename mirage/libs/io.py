@@ -5,6 +5,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from mirage.libs.logger import logger
+from typing import List, Any
 
 '''
 This submodule provides some useful functions allowing to interact with the users.
@@ -36,14 +38,16 @@ def banner():
 	:return: banner of Mirage
 	:rtype: str
 	'''
-	print(colorize('''
-███╗   ███╗██╗██████╗  █████╗  ██████╗ ███████╗
-████╗ ████║██║██╔══██╗██╔══██╗██╔════╝ ██╔════╝
-██╔████╔██║██║██████╔╝███████║██║  ███╗█████╗
-██║╚██╔╝██║██║██╔══██╗██╔══██║██║   ██║██╔══╝
-██║ ╚═╝ ██║██║██║  ██║██║  ██║╚██████╔╝███████╗
-╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
-	''',"red"))
+	banner_text = """
+	███╗   ███╗██╗██████╗  █████╗  ██████╗ ███████╗
+	████╗ ████║██║██╔══██╗██╔══██╗██╔════╝ ██╔════╝
+	██╔████╔██║██║██████╔╝███████║██║  ███╗█████╗  
+	██║╚██╔╝██║██║██╔══██╗██╔══██║██║   ██║██╔══╝  
+	██║ ╚═╝ ██║██║██║  ██║██║  ██║╚██████╔╝███████╗
+	╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+	"""
+	logger.info(colorize(banner_text, "cyan"))
+	logger.info(colorize("Welcome to Mirage Framework", "yellow"))
 
 
 def colorCode(selectedColor):
@@ -84,7 +88,15 @@ def colorize(message,color):
 	:return: string containing the right color code and the message
 	:rtype: str
 	'''
-	return "{0}{1}{2}".format(colorCode(color),message,colorCode("default"))
+	colors = {
+		"red": "\033[91m",
+		"green": "\033[92m",
+		"yellow": "\033[93m",
+		"blue": "\033[94m",
+		"purple": "\033[95m",
+		"cyan": "\033[96m",
+	}
+	return f"{colors.get(color, '')}{message}\033[0m"
 
 
 def enterPinCode(message="Enter pin code: ",maxLength = 6):
@@ -118,8 +130,7 @@ def success(message):
 	:param message: message to display
 	:type message: str
 	'''
-	if VERBOSITY_LEVEL > VerbosityLevels.NONE:
-		print(colorize("[SUCCESS] ","green")+message)
+	logger.info(f"SUCCESS: {message}")
 
 def fail(message):
 	'''
@@ -128,8 +139,7 @@ def fail(message):
 	:param message: message to display
 	:type message: str
 	'''
-	if VERBOSITY_LEVEL > VerbosityLevels.NONE:
-		print(colorize("[FAIL] ","red")+message)
+	logger.error(f"FAIL: {message}")
 
 def info(message):
 	'''
@@ -138,8 +148,7 @@ def info(message):
 	:param message: message to display
 	:type message: str
 	'''
-	if VERBOSITY_LEVEL == VerbosityLevels.ALL:
-		print(colorize("[INFO] ","yellow")+message)
+	logger.info(message)
 
 
 def displayPacket(packet):
@@ -186,17 +195,15 @@ def ask(prompt,default="",final=": "):
 		'26'
 
 	'''
-	if (default!=""):
-		result = input(colorize("[QUESTION] ","purple")+'{0} [{1}] {2}'.format(prompt, default,final))
+	if default:
+		user_input = input(f"{prompt} [{default}]: ")
+		return user_input if user_input else default
 	else:
-		result = input(colorize("[QUESTION] ","purple")+'{0} {1}'.format(prompt,final))
-	if result == '':
-		result = default
-	return result
+		return input(f"{prompt}: ")
 
 
 
-def chart(columnsName,content,title=""):
+def chart(headers, data, title=""):
 	'''
 	This function displays a table containing multiple informations provided by the user.
 	He can provide a header name for each column thanks to ``columnsName``, and ``content`` allows him to provide the data.
@@ -227,13 +234,24 @@ def chart(columnsName,content,title=""):
 
 	'''
 	if VERBOSITY_LEVEL > VerbosityLevels.NONE:
-		tab = []
-		tab.append(columnsName)
-		tab+=(content)
-		print('\n' + SingleTable(tab,title).table)
+		if title:
+			logger.info(f"\n{title}")
+		
+		# Calculate column widths
+		col_widths = [max(len(str(row[i])) for row in [headers] + data) for i in range(len(headers))]
+		
+		# Print headers
+		header_str = " | ".join(f"{header:<{width}}" for header, width in zip(headers, col_widths))
+		logger.info(header_str)
+		logger.info("-" * len(header_str))
+		
+		# Print data
+		for row in data:
+			row_str = " | ".join(f"{str(item):<{width}}" for item, width in zip(row, col_widths))
+			logger.info(row_str)
 
 
-def progress(count, total=100, suffix=""):
+def progress(current, total, suffix=""):
 	'''
 	This function displays a progress bar. This bar is not automatically filled, the user has to call ``progress`` with
 	the right values multiple times.
@@ -260,28 +278,11 @@ def progress(count, total=100, suffix=""):
 
 
 	'''
-	if count>=total:
-		count = total
-	elif count < 0:
-		count = 0
-	
-	bar_len = 60
-	filled_len = int(round(bar_len * count / float(total)))
-
-	percents = round(100.0 * count / float(total), 1)
-	bar = '\x1b[35m)\x1b[39m' * filled_len + '_' * (bar_len - filled_len)
-	if (bar_len == filled_len):
-		end = "\n"
-	else:
-		end = "\r"
-	if suffix == "":
-		suffix = str(percents) + "%"
-	sys.stdout.write('()%s) %s%s' % (bar, suffix,end))
-	if total!=count:
-		sys.stdout.flush()
-		return True
-	else:
-		return False
+	bar_length = 50
+	filled_length = int(round(bar_length * current / float(total)))
+	percents = round(100.0 * current / float(total), 1)
+	bar = '=' * filled_length + '-' * (bar_length - filled_length)
+	logger.info(f"[{bar}] {percents}% ...{suffix}")
 
 class MiceVisualizer:
 	'''

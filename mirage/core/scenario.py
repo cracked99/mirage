@@ -1,13 +1,14 @@
 import traceback
 from mirage.core import module,app
 from mirage.libs import io
+from typing import Any, Optional, Callable
 
 class Scenario:
 	'''
 	This class defines a scenario. A Scenario is a Mirage entity allowing to customize the behaviour of a module without 
 	modifying its code, and can be compared to a list of callbacks called when a specific event (or signal) happens.
 	'''
-	def __init__(self,name="",module=None):
+	def __init__(self,name: str = "",module: Optional[module.Module] = None):
 		'''
 		This constructor allows to define the main attributes of a scenario, especially :
 		- name : name of the scenario
@@ -16,18 +17,16 @@ class Scenario:
 		- args : the arguments of the associated module
 
 		:param name: name of the scenario
-		:type name: str
 		:param module: associated module instance
-		:type module: core.module.Module
 		'''
-		self.name = name if name != "" else self.__class__.__name__
-		self.description = "A generic collection of callbacks"
-		self.module = module
-		self.args = module.args
+		self.name: str = name if name != "" else self.__class__.__name__
+		self.description: str = "A generic collection of callbacks"
+		self.module: Optional[module.Module] = module
+		self.args: Dict[str, Any] = module.args if module else {}
 		
 
 
-	def receiveSignal(self,signal,*args, **kwargs):
+	def receiveSignal(self,signal: str,*args: Any, **kwargs: Any) -> Optional[bool]:
 		'''
 		This method is called when a signal is received, and calls the corresponding method in the scenario if it exists.
 		'''
@@ -37,23 +36,22 @@ class Scenario:
 				return defaultBehaviour
 			except Exception as e:
 				if not hasattr(self,signal):
-					io.fail("Non matching method in scenario "+self.name)
+					io.fail(f"Non matching method in scenario {self.name}")
 				else:
-					io.fail("An error occured in scenario "+self.name+" !")
-					if app.App.Instance.debugMode:
+					io.fail(f"An error occurred in scenario {self.name}!")
+					if app.App.Instance.debug_mode:
 			    			traceback.print_exception(type(e), e, e.__traceback__)
 		else:
 			return True
 
-def scenarioSignal(argument):
+def scenarioSignal(argument: str) -> Callable:
 	'''
 	Decorator allowing to link a module's method to a specific signal.
 
 	:param argument: signal name
-	:type argument: str
 	'''
-	def signalDecorator(function):
-		def wrapper(self,*args, **kwargs):
+	def signalDecorator(function: Callable) -> Callable:
+		def wrapper(self: Any,*args: Any, **kwargs: Any) -> Any:
 			if hasattr(self,"scenario"):
 				defaultBehaviour = self.scenario.receiveSignal(argument,*args,**kwargs)
 			else:

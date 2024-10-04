@@ -1,13 +1,16 @@
 from mirage.libs import utils
-import multiprocessing,os,sys
+import multiprocessing
+import os
+import sys
 from ctypes import c_char_p
+from typing import List, Any, Callable, Optional
 
 class Task(multiprocessing.Process):
 	'''
 	This class defines a background Task, it inherits from ``multiprocessing.Process``.
 	It provides an user friendly API to easily run a given function in background.
 	'''
-	def __init__(self,function,name,args=[],kwargs={}):
+	def __init__(self, function: Callable, name: str, args: List[Any] = [], kwargs: dict = {}):
 		'''
 		This constructor allows to provide the main characteristics of the task, and initializes the attributes.
 		
@@ -20,38 +23,43 @@ class Task(multiprocessing.Process):
 		:param kwargs: dictionary of named arguments
 		:type kwargs: dict
 		'''
-		self.function = function
-		self.taskName = name
-		self.args = args
-		self.kwargs = kwargs
+		self.function: Callable = function
+		self.taskName: str = name
+		self.args: List[Any] = args
+		self.kwargs: dict = kwargs
 		self.manager = multiprocessing.Manager()
 		self.state = self.manager.Value(c_char_p, "stopped")
-		self.outputFilename = ""
-		self.outputFile = None
+		self.outputFilename: str = ""
+		self.outputFile: Optional[Any] = None
 		super().__init__()
 
-	def run(self):
+	def run(self) -> None:
 		'''
 		This method runs the specified function in background.
 		
 		.. note:: The standard output is automatically redirected in a temporary file, named ``<taskName>-<taskPID>.out``
 		'''
-		self.outputFilename = utils.getTempDir()+"/"+self.taskName+"-"+str(os.getpid()) + ".out"
+		self.outputFilename = f"{utils.getTempDir()}/{self.taskName}-{os.getpid()}.out"
 		self.outputFile = open(self.outputFilename, 'a')
 		sys.stdout = self.outputFile
-		self.function(*(self.args), **(self.kwargs))
-		self.state.value = "ended"
+		try:
+			self.function(*(self.args), **(self.kwargs))
+		except Exception as e:
+			print(f"Error in task {self.taskName}: {str(e)}")
+		finally:
+			self.state.value = "ended"
+			if self.outputFile:
+				self.outputFile.close()
 
-	def start(self):
+	def start(self) -> None:
 		'''
 		This method allows to start the current task.
 		'''
 		self.state.value = "running"
 		super().start()
-		self.outputFilename = utils.getTempDir()+"/"+self.taskName+"-"+str(self.pid)+".out"
+		self.outputFilename = f"{utils.getTempDir()}/{self.taskName}-{self.pid}.out"
 
-
-	def stop(self):
+	def stop(self) -> None:
 		'''
 		This method allows to stop the current task.
 		'''
@@ -60,7 +68,7 @@ class Task(multiprocessing.Process):
 		if self.outputFile is not None:
 			self.outputFile.close()
 
-	def toList(self):
+	def toList(self) -> List[str]:
 		'''
 		This method returns a list representing the current task.
 		It is composed of :
